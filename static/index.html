@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Srikandi Naskah Extractor — PoC</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --bg-elevated: #131c2e;
+      --panel: #1a2438;
+      --border: #283449;
+      --border-strong: #3a4961;
+      --muted: #64748b;
+      --fg: #e2e8f0;
+      --fg-soft: #94a3b8;
+      --accent: #38bdf8;
+      --accent-hover: #0ea5e9;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --err: #f87171;
+      --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--fg); line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      padding: 18px 32px; border-bottom: 1px solid var(--border);
+      background: var(--bg-elevated);
+    }
+    header .row { display: flex; align-items: baseline; gap: 12px; max-width: 1200px; margin: 0 auto; }
+    header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+    header p { margin: 0; color: var(--fg-soft); font-size: 13px; }
+    header .row .keybtn {
+      margin-left: auto;
+      background: transparent; color: var(--fg-soft);
+      border: 1px solid var(--border-strong); border-radius: 6px;
+      padding: 5px 10px; font-size: 12px; cursor: pointer; white-space: nowrap;
+    }
+    header .row .keybtn:hover { color: var(--fg); border-color: var(--accent); }
+    main { padding: 28px 32px; max-width: 1200px; margin: 0 auto; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr);
+      gap: 24px;
+    }
+    @media (max-width: 820px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--fg-soft);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .card-body { padding: 18px; }
+
+    /* Drop zone — flat, no nested border, full width of card-body */
+    .dropzone {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 8px; padding: 36px 16px;
+      background: rgba(56, 189, 248, 0.03);
+      border: 1.5px dashed var(--border-strong);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .dropzone:hover, .dropzone.over {
+      border-color: var(--accent);
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .dropzone input { display: none; }
+    .dropzone .ico { font-size: 28px; opacity: 0.7; }
+    .dropzone .primary { font-size: 14px; font-weight: 500; }
+    .dropzone .hint { font-size: 12px; color: var(--fg-soft); }
+
+    .filerow {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; padding: 10px 12px; margin-top: 12px;
+      background: var(--bg-elevated); border-radius: 6px;
+      font-size: 13px;
+    }
+    .filerow .fname { font-family: var(--mono); font-size: 12px; word-break: break-all; flex: 1; }
+    .filerow .fsize { color: var(--fg-soft); font-size: 12px; white-space: nowrap; }
+
+    .btn {
+      display: block; width: 100%;
+      background: var(--accent); color: #0b1220; border: 0;
+      border-radius: 8px;
+      padding: 11px 18px; font-weight: 600; cursor: pointer;
+      font-size: 14px; margin-top: 14px;
+      transition: background 0.15s;
+    }
+    .btn:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .empty {
+      color: var(--muted); font-size: 14px; padding: 24px 0; text-align: center;
+    }
+
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .badge.ok { background: rgba(74, 222, 128, 0.15); color: var(--ok); }
+    .badge.warn { background: rgba(251, 191, 36, 0.15); color: var(--warn); }
+    .badge.err { background: rgba(248, 113, 113, 0.15); color: var(--err); }
+    .badge.info { background: rgba(56, 189, 248, 0.15); color: var(--accent); }
+
+    .fields { display: grid; gap: 1px; background: var(--border); border-radius: 8px; overflow: hidden; }
+    .field {
+      display: grid; grid-template-columns: 160px 1fr; gap: 14px;
+      padding: 12px 14px;
+      background: var(--panel);
+    }
+    .field .k { color: var(--fg-soft); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; padding-top: 1px; }
+    .field .v { font-family: var(--mono); font-size: 13px; word-break: break-word; }
+    .field .v.null { color: var(--muted); font-style: italic; font-family: inherit; }
+
+    .timing {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 16px;
+    }
+    .timing-cell {
+      background: var(--bg-elevated); padding: 12px 10px;
+      border-radius: 8px; text-align: center;
+    }
+    .timing-cell .n { font-size: 18px; font-weight: 600; color: var(--accent); font-family: var(--mono); }
+    .timing-cell .l { font-size: 10px; color: var(--fg-soft); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+
+    .meta-strip {
+      margin-top: 14px; padding: 10px 12px;
+      background: var(--bg-elevated); border-radius: 6px;
+      font-size: 12px; color: var(--fg-soft); line-height: 1.7;
+    }
+    .meta-strip code { font-family: var(--mono); color: var(--fg); font-size: 11px; }
+
+    .warns { margin-top: 14px; }
+    .warns .w {
+      background: rgba(251, 191, 36, 0.08); border-left: 3px solid var(--warn);
+      padding: 8px 12px; border-radius: 4px; font-size: 12px; margin: 4px 0;
+      font-family: var(--mono);
+    }
+    .error-box {
+      background: rgba(248, 113, 113, 0.08); border-left: 3px solid var(--err);
+      padding: 12px 14px; border-radius: 4px; font-size: 13px;
+      font-family: var(--mono);
+    }
+
+    details {
+      margin-top: 10px; padding: 8px 12px;
+      background: var(--bg-elevated); border-radius: 6px;
+      font-size: 13px;
+    }
+    details summary { cursor: pointer; color: var(--fg-soft); font-size: 12px; }
+    details summary:hover { color: var(--fg); }
+    details pre {
+      background: #060c1a; border-radius: 6px; padding: 12px; overflow: auto; max-height: 320px;
+      font-family: var(--mono); font-size: 11px; color: #cbd5e1; margin: 10px 0 0;
+      border: 1px solid var(--border);
+    }
+
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid transparent; border-top-color: currentColor;
+      border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .status-line { color: var(--fg-soft); font-size: 13px; padding: 16px 0; display: flex; align-items: center; gap: 10px; }
+    .status-line .jobid { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <h1>Srikandi Naskah Extractor</h1>
+      <span class="badge info">PoC</span>
+      <p>Docling + Ollama (qwen2.5:7b) · async via Redis queue</p>
+      <button id="setkey" class="keybtn" title="Set / ganti API key (header X-API-Key)">🔑 API key</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="layout">
+      <!-- LEFT: upload + submit -->
+      <section class="card">
+        <div class="card-header">Upload</div>
+        <div class="card-body">
+          <label class="dropzone" id="drop">
+            <input type="file" id="file" accept=".pdf,.docx" />
+            <div class="ico">📄</div>
+            <div class="primary"><strong>Drag &amp; drop</strong> file di sini</div>
+            <div class="hint">atau klik untuk pilih · .pdf / .docx</div>
+          </label>
+          <div id="filerow"></div>
+          <button class="btn" id="submit" disabled>Extract</button>
+        </div>
+      </section>
+
+      <!-- RIGHT: results -->
+      <section class="card">
+        <div class="card-header">Hasil Ekstraksi</div>
+        <div class="card-body" id="output">
+          <div class="empty">Belum ada file di-upload.</div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+<script>
+const drop = document.getElementById('drop');
+const fileInput = document.getElementById('file');
+const submit = document.getElementById('submit');
+const filerow = document.getElementById('filerow');
+const output = document.getElementById('output');
+let currentFile = null;
+
+// --- API key (X-API-Key) -----------------------------------------------------
+// Stored in localStorage. NOT prompted on load — the server may have auth
+// disabled (local dev). Only prompted when the server answers 401, or via 🔑.
+const API_KEY_STORE = 'extractor_api_key';
+const getKey = () => localStorage.getItem(API_KEY_STORE) || '';
+function promptForKey(msg) {
+  const k = window.prompt(msg || 'Masukkan API key (header X-API-Key):', getKey());
+  if (k !== null) localStorage.setItem(API_KEY_STORE, k.trim());
+  return getKey();
+}
+async function apiFetch(url, opts = {}) {
+  const withKey = (key) => {
+    const headers = Object.assign({}, opts.headers || {});
+    if (key) headers['X-API-Key'] = key;
+    return Object.assign({}, opts, { headers });
+  };
+  let r = await fetch(url, withKey(getKey()));
+  if (r.status === 401) {                          // server demands a key (or stored one is wrong)
+    const key = promptForKey('API key salah / diperlukan. Masukkan X-API-Key:');
+    if (key) r = await fetch(url, withKey(key));    // retry once with the new key
+  }
+  return r;
+}
+document.getElementById('setkey').addEventListener('click', () => promptForKey());
+
+['dragover', 'dragenter'].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.add('over');
+}));
+['dragleave', 'drop'].forEach(e => drop.addEventListener(e, ev => {
+  ev.preventDefault(); drop.classList.remove('over');
+}));
+drop.addEventListener('drop', ev => {
+  ev.preventDefault();
+  if (ev.dataTransfer.files.length) handleFile(ev.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+function handleFile(f) {
+  currentFile = f;
+  filerow.innerHTML = '';
+  const row = document.createElement('div');
+  row.className = 'filerow';
+  const fname = document.createElement('span');
+  fname.className = 'fname';
+  fname.textContent = f.name;
+  const fsize = document.createElement('span');
+  fsize.className = 'fsize';
+  fsize.textContent = (f.size / 1024).toFixed(1) + ' KB';
+  row.append(fname, fsize);
+  filerow.appendChild(row);
+  submit.disabled = false;
+}
+
+submit.addEventListener('click', async () => {
+  if (!currentFile) return;
+  submit.disabled = true;
+  submit.innerHTML = '<span class="spinner"></span> Submitting...';
+  output.innerHTML = '<div class="status-line"><span class="spinner"></span>Mengantri job ke Redis...</div>';
+
+  const fd = new FormData();
+  fd.append('file', currentFile);
+  const t0 = performance.now();
+  let jobId = null;
+  try {
+    const r = await apiFetch('/jobs', { method: 'POST', body: fd });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({detail: r.statusText}));
+      throw new Error(err.detail || `HTTP ${r.status}`);
+    }
+    const enqueued = await r.json();
+    jobId = enqueued.id;
+    submit.innerHTML = '<span class="spinner"></span> Polling ' + jobId.slice(0, 8);
+    await pollJob(jobId, t0);
+  } catch (e) {
+    renderError(e.message);
+  } finally {
+    submit.disabled = false;
+    submit.textContent = 'Extract';
+  }
+});
+
+async function pollJob(jobId, t0) {
+  let attempt = 0;
+  while (true) {
+    attempt++;
+    const r = await apiFetch('/jobs/' + encodeURIComponent(jobId));
+    if (!r.ok) throw new Error(`Poll failed: HTTP ${r.status}`);
+    const job = await r.json();
+    const wall = ((performance.now() - t0) / 1000).toFixed(1);
+
+    if (job.status === 'queued' || job.status === 'started' || job.status === 'deferred' || job.status === '') {
+      const phase = job.status === 'started' ? 'Worker processing' :
+                    job.status === 'queued' ? 'In queue' :
+                    job.status === 'deferred' ? 'Deferred' : 'Transitioning';
+      renderStatus(phase, wall, attempt, jobId);
+      await new Promise(r => setTimeout(r, 1000));
+      continue;
+    }
+
+    if (job.status === 'finished') {
+      renderResult(job.result, wall, jobId);
+      return;
+    }
+
+    if (job.status === 'failed') {
+      renderError(job.error || 'unknown error', jobId);
+      return;
+    }
+
+    throw new Error(`Unexpected job status: ${job.status}`);
+  }
+}
+
+function renderStatus(phase, wall, attempt, jobId) {
+  // build via DOM, not innerHTML
+  output.innerHTML = '';
+  const line = document.createElement('div');
+  line.className = 'status-line';
+  const sp = document.createElement('span'); sp.className = 'spinner';
+  line.appendChild(sp);
+  line.appendChild(document.createTextNode(' ' + phase + '... (' + wall + 's elapsed, poll #' + attempt + ')'));
+  const jid = document.createElement('span');
+  jid.className = 'jobid'; jid.textContent = 'job: ' + jobId.slice(0, 8);
+  line.appendChild(jid);
+  output.appendChild(line);
+}
+
+function renderError(msg, jobId) {
+  output.innerHTML = '';
+  const head = document.createElement('div');
+  head.style.marginBottom = '12px';
+  const badge = document.createElement('span');
+  badge.className = 'badge err';
+  badge.textContent = 'Job failed';
+  head.appendChild(badge);
+  output.appendChild(head);
+
+  const box = document.createElement('div');
+  box.className = 'error-box';
+  box.textContent = msg;
+  output.appendChild(box);
+
+  if (jobId) {
+    const meta = document.createElement('div');
+    meta.className = 'meta-strip';
+    meta.textContent = 'job: ' + jobId;
+    output.appendChild(meta);
+  }
+}
+
+function fieldRow(key, val) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'field';
+  const k = document.createElement('div');
+  k.className = 'k'; k.textContent = key;
+  const v = document.createElement('div');
+  v.className = 'v';
+  const isNull = val === null || val === undefined || val === '';
+  if (isNull) {
+    v.classList.add('null');
+    v.textContent = 'null';
+  } else {
+    v.textContent = String(val);
+  }
+  wrapper.append(k, v);
+  return wrapper;
+}
+
+function timingCell(seconds, label, validBadge) {
+  const cell = document.createElement('div');
+  cell.className = 'timing-cell';
+  const n = document.createElement('div'); n.className = 'n';
+  n.textContent = (seconds || 0).toFixed(2) + 's';
+  const l = document.createElement('div'); l.className = 'l';
+  l.appendChild(document.createTextNode(label));
+  if (validBadge) {
+    l.appendChild(document.createTextNode(' '));
+    const b = document.createElement('span');
+    b.className = 'badge ' + (validBadge === 'ok' ? 'ok' : 'err');
+    b.textContent = validBadge === 'ok' ? 'JSON OK' : 'JSON FAIL';
+    l.appendChild(b);
+  }
+  cell.append(n, l);
+  return cell;
+}
+
+function renderResult(d, wall, jobId) {
+  output.innerHTML = '';
+
+  // Fields grid
+  const fields = document.createElement('div');
+  fields.className = 'fields';
+  fields.appendChild(fieldRow('hal', d.hal));
+  fields.appendChild(fieldRow('nomor_naskah', d.nomor_naskah));
+  fields.appendChild(fieldRow('tanggal', d.tanggal));
+  fields.appendChild(fieldRow('suggest_ringkasan', d.suggest_ringkasan));
+  output.appendChild(fields);
+
+  // Timings
+  const timing = document.createElement('div');
+  timing.className = 'timing';
+  timing.appendChild(timingCell(d.docling_elapsed_s, 'Docling'));
+  timing.appendChild(timingCell(d.metadata_elapsed_s, 'Metadata', d.metadata_json_valid ? 'ok' : 'err'));
+  timing.appendChild(timingCell(d.ringkasan_elapsed_s, 'Ringkasan', d.ringkasan_json_valid ? 'ok' : 'err'));
+  output.appendChild(timing);
+
+  // Meta strip
+  const meta = document.createElement('div');
+  meta.className = 'meta-strip';
+  const parts = [
+    'Total wall: ' + wall + 's',
+    'Model: <code>' + escapeHtml(d.model) + '</code>',
+    'Strategy: ' + escapeHtml(d.strategy) + (d.ringkasan_n_llm_calls > 1 ? ' (' + d.ringkasan_n_llm_calls + ' LLM calls)' : ''),
+    'Parsed: ' + d.parsed_chars + ' chars',
+  ];
+  if (jobId) parts.push('job: <code>' + escapeHtml(jobId.slice(0, 8)) + '</code>');
+  meta.innerHTML = parts.join(' · ');
+  output.appendChild(meta);
+
+  // Warnings
+  if (d.warnings && d.warnings.length) {
+    const wrap = document.createElement('div');
+    wrap.className = 'warns';
+    d.warnings.forEach(w => {
+      const div = document.createElement('div');
+      div.className = 'w';
+      div.textContent = '⚠ ' + w;
+      wrap.appendChild(div);
+    });
+    output.appendChild(wrap);
+  }
+
+  // Collapsible previews
+  if (d.parsed_markdown_preview) {
+    const md = document.createElement('details');
+    const sum = document.createElement('summary');
+    sum.textContent = '📄 Parsed markdown preview (first 1000 chars)';
+    md.appendChild(sum);
+    const pre = document.createElement('pre');
+    pre.textContent = d.parsed_markdown_preview;
+    md.appendChild(pre);
+    output.appendChild(md);
+  }
+
+  const raw = document.createElement('details');
+  const rawSum = document.createElement('summary');
+  rawSum.textContent = '🔍 Raw JSON response';
+  raw.appendChild(rawSum);
+  const rawPre = document.createElement('pre');
+  rawPre.textContent = JSON.stringify(d, null, 2);
+  raw.appendChild(rawPre);
+  output.appendChild(raw);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+</body>
+</html>

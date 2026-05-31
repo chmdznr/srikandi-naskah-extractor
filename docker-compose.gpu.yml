@@ -1,0 +1,59 @@
+# Override file: swap WORKER service ke GPU image dengan NVIDIA device access.
+# API tetap CPU karena cuma forward HTTP — tidak butuh GPU.
+#
+# Usage (membaca file utama + override ini):
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+#
+# Prerequisite di host:
+#   1. NVIDIA driver terinstall di host (nvidia-smi works)
+#   2. nvidia-container-toolkit terinstall (untuk Docker GPU passthrough)
+#      Linux: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+#      Catatan: Docker Desktop / OrbStack on MAC TIDAK SUPPORT NVIDIA GPU passthrough
+#               (Mac tidak punya CUDA — Metal saja, dan Metal tidak exposed ke container).
+#               Override ini cuma berfungsi di Linux GPU host (mis. tensordock VM).
+#   3. Ollama jalan di host (default OLLAMA_HOST=http://host.docker.internal:11434)
+#      ATAU di-co-locate sebagai service compose tambahan (lihat catatan bawah)
+
+services:
+  worker:
+    build:
+      dockerfile: Dockerfile.gpu
+    environment:
+      # NVIDIA runtime env vars — exposes semua GPU ke container
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # Catatan opsional: kalau mau co-locate Ollama sebagai service compose juga (full containerized stack),
+  # uncomment service di bawah dan ubah api+worker environment OLLAMA_HOST jadi http://ollama:11434.
+  # Hapus extra_hosts: host-gateway dari kedua service. Lebih portable tapi extra ~5GB image.
+  #
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+  #   environment:
+  #     OLLAMA_HOST: 0.0.0.0:11434
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: all
+  #             capabilities: [gpu]
+  #   healthcheck:
+  #     test: ["CMD", "ollama", "list"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+  #
+  # volumes:
+  #   ollama_models:

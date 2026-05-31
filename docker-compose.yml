@@ -1,0 +1,62 @@
+# Local dev compose: redis + api + worker.
+# Ollama runs on host (MacBook native), service-to-service via host.docker.internal.
+#
+# Run:    docker compose up --build
+# Access: http://localhost:8000
+# Logs:   docker compose logs -f worker
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"          # exposed for local debug (rq-dashboard, redis-cli)
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_HOST: http://host.docker.internal:11434
+      UPLOAD_DIR: /shared-uploads
+      API_KEY: ${API_KEY:-}              # set to enable auth; empty = auth disabled (local dev)
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-*}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"   # Linux portability
+    volumes:
+      - upload_staging:/shared-uploads
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: ["uv", "run", "python", "worker.py"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      OLLAMA_HOST: http://host.docker.internal:11434
+      UPLOAD_DIR: /shared-uploads
+      # NOTE: HF_HUB_OFFLINE=1 breaks Docling — snapshot revision check rejects local-only mode.
+      # Live with ~10s metadata HEAD overhead per worker startup as trade-off.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - upload_staging:/shared-uploads          # same volume mount as api — workers read what api wrote
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # deploy.replicas tidak supported di plain docker-compose; scale via `docker compose up --scale worker=2`
+
+volumes:
+  redis_data:
+  upload_staging:

@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# uv / virtualenv
+.venv/
+
+# Secrets — NEVER commit real env files. Only deploy/.env.example is tracked.
+.env
+*.env
+!.env.example
+!deploy/.env.example
+
+# Local extractor staging / runtime
+extractor-uploads/
+
+# macOS
+.DS_Store

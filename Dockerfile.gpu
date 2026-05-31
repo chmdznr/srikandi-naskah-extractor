@@ -1,0 +1,36 @@
+# GPU-enabled worker image (base: pytorch+cuda+cudnn).
+# Docling auto-detects CUDA via torch.cuda.is_available() → pakai GPU untuk layout model + OCR.
+# Ollama TIDAK perlu di image ini — diasumsikan jalan native di host OR sebagai service compose terpisah.
+#
+# Image size: ~7 GB (base pytorch sudah 5 GB). Acceptable untuk worker pod yang jarang re-build.
+# Untuk image lebih kecil, base ke `nvidia/cuda:12.4.0-cudnn-runtime-ubuntu22.04` + pip install torch
+# (build lebih lama tapi image ~3 GB).
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime
+
+# Docling PDF backend butuh X11 + graphics libs (same reason as CPU Dockerfile).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libxcb1 libxext6 libxrender1 libsm6 libice6 \
+        libgl1 libglib2.0-0 libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:0.9 /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Install deps. uv akan install torch lagi over base image (slight bloat but reliable —
+# version matching base image torch ke docling requirement bukan worth the fragility).
+COPY pyproject.toml ./
+RUN uv sync --no-dev
+
+# Pre-download Docling models (layout + tableformer + rapidocr, ~540MB) ke image cache.
+# Eliminates first-PDF cold start dari ~50-70s ke ~5-10s.
+RUN uv run docling-tools models download layout tableformer rapidocr
+
+# Source last (changes most often)
+COPY *.py ./
+COPY static/ ./static/
+
+EXPOSE 8000
+
+# Default = API. Override CMD untuk worker via compose.
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
