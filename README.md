@@ -6,23 +6,32 @@ Model default: `qwen2.5:7b-instruct-q4_K_M` (terpilih dari benchmark — accurac
 
 ## Arsitektur
 
+```mermaid
+flowchart LR
+    Client(["Client / FE"])
+
+    subgraph pod["Extractor service (1 pod / compose — supervisord)"]
+        API["FastAPI :8000<br/>POST /jobs · GET /jobs/:id<br/>X-API-Key auth"]
+        Worker["RQ Worker (SimpleWorker, in-process)<br/>Docling parse → Ollama generate"]
+        Redis[("Redis :6379<br/>queue + result (TTL 1h)")]
+        Ollama["Ollama daemon<br/>qwen2.5:7b · OLLAMA_HOST"]
+    end
+
+    FE["FE callback endpoint<br/>CALLBACK_URL"]
+
+    Client -->|"1 · POST /jobs (file) + X-API-Key"| API
+    API -->|"2 · enqueue"| Redis
+    Worker -->|"3 · dequeue"| Redis
+    Worker -->|"4 · generate (metadata + ringkasan)"| Ollama
+    Worker -->|"5 · store result"| Redis
+    Client -->|"6a · poll GET /jobs/:id"| API
+    API -->|"read state + result"| Redis
+    Worker -.->|"6b · POST result — fire-and-forget<br/>X-Callback-Token (optional)"| FE
 ```
-                                              ┌─────────────┐
-                                              │   Ollama    │  ← MacBook native
-                                              │ qwen2.5:7b  │     (host:11434)
-                                              └──────▲──────┘
-                                                     │
-            POST /jobs (file)                        │ generate
-              ┌───────────┐    enqueue    ┌──────────┴────┐
-   Client ───▶│  FastAPI  │──────────────▶│  RQ Worker    │
-              │   :8000   │               │  (extractor)  │
-              └─────┬─────┘               └──────┬────────┘
-                    │                            │
-                    │       ┌─────────┐          │ result
-                    └──────▶│  Redis  │◀─────────┘
-            poll GET        │  :6379  │  job state + result (TTL 1h)
-            /jobs/{id}      └─────────┘
-```
+
+> Catatan: `OLLAMA_HOST` menunjuk daemon Ollama. Di deploy GPU (RunPod) ia co-located
+> di dalam pod (supervisord); di dev MacBook ia jalan native di host (`host.docker.internal`
+> bila API/worker di container). Callback (6b) opsional — aktif bila `CALLBACK_URL` diset.
 
 ## Cara Run
 
