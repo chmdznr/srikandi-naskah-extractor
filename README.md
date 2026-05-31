@@ -110,6 +110,117 @@ queued → started → finished
 
 `GET /jobs/{id}` polling — 1s interval recommended. Result expires after `RESULT_TTL_S` (default 3600s = 1h).
 
+### Contoh response (semua endpoint)
+
+**`POST /jobs`** → `202 Accepted` (job baru di-enqueue):
+
+```json
+{
+  "id": "4b1e9dc1-97ec-4b15-b56d-9c6eeab59a76",
+  "status": "queued",
+  "created_at": "2026-05-31T02:33:15.646122+00:00",
+  "started_at": null,
+  "ended_at": null,
+  "result": null,
+  "error": null
+}
+```
+
+**`GET /jobs/{id}`** → `200` saat `status: "finished"` (hasil ekstraksi lengkap):
+
+```json
+{
+  "id": "4b1e9dc1-97ec-4b15-b56d-9c6eeab59a76",
+  "status": "finished",
+  "created_at": "2026-05-31T02:33:15.646122+00:00",
+  "started_at": "2026-05-31T02:33:15.653019+00:00",
+  "ended_at": "2026-05-31T02:33:22.209115+00:00",
+  "result": {
+    "hal": null,
+    "nomor_naskah": "000.5.6.2/X /2025",
+    "tanggal": "15 Desember 2025",
+    "suggest_ringkasan": "Surat tugas ini menugaskan Plt. Kepala Dinas Arsip dan Perpustakaan untuk melaksanakan penilaian dan verifikasi fisik arsip usul musnah.",
+    "parsed_markdown_preview": "## SURAT TUGAS\n\nNOMOR : 000.5.6.2/X /2025\n\nDasar : Keputusan Bupati ...",
+    "docling_elapsed_s": 10.512,
+    "metadata_elapsed_s": 4.294,
+    "ringkasan_elapsed_s": 1.622,
+    "ringkasan_n_llm_calls": 1,
+    "metadata_json_valid": true,
+    "ringkasan_json_valid": true,
+    "model": "qwen2.5:7b-instruct-q4_K_M",
+    "strategy": "single-shot",
+    "parsed_chars": 2754,
+    "warnings": [],
+    "original_filename": "SURAT TUGAS PEMUSNAHAN.pdf"
+  },
+  "error": null
+}
+```
+
+**`GET /jobs/{id}`** → `200` saat masih `queued` / `started` (sama seperti POST, `result` & `ended_at` masih `null`; `started_at` terisi begitu worker mulai).
+
+**`GET /jobs/{id}`** → `200` saat `status: "failed"` (exception TAK tertangani — mis. Ollama mati / timeout / OOM):
+
+```json
+{
+  "id": "9c139434-a74c-4eeb-a734-0fe7f9162409",
+  "status": "failed",
+  "created_at": "2026-05-31T02:33:24.247982+00:00",
+  "started_at": "2026-05-31T02:33:24.253716+00:00",
+  "ended_at": "2026-05-31T02:33:25.000000+00:00",
+  "result": null,
+  "error": "ConnectionError: [Errno 111] Connection refused"
+}
+```
+
+> ⚠️ **Penting untuk FE — parse gagal ≠ status failed.** Bila Docling gagal mem-parse
+> dokumen (PDF korup/rusak), job TETAP `finished` tapi `result.warnings` berisi pesan
+> (`"docling_parse_failed: ..."`), semua field metadata `null`, dan
+> `metadata_json_valid`/`ringkasan_json_valid` = `false`. Jadi cek **`result.warnings`
+> dan `*_json_valid`**, bukan hanya `status`, untuk memastikan ekstraksi benar-benar sukses.
+
+**`GET /health`** → `200` (`status: "degraded"` + HTTP 503 bila Redis down / tak ada worker):
+
+```json
+{
+  "status": "ok",
+  "redis": true,
+  "workers_listening": 1,
+  "queue_depth": 0,
+  "queue": "extractor"
+}
+```
+
+**Error responses** (semua berbentuk `{"detail": "..."}`):
+
+```jsonc
+// 401 — key salah / tak ada (POST /jobs, GET /jobs/{id})
+{ "detail": "Invalid or missing API key" }
+// 400 — tipe file tak didukung (POST /jobs)
+{ "detail": "Unsupported file type '.txt'. Hanya .pdf / .docx didukung." }
+// 400 — file kosong (POST /jobs)
+{ "detail": "Empty upload" }
+// 404 — job tak ada / sudah expired (GET /jobs/{id})
+{ "detail": "Job <id> not found (mungkin sudah expired — default TTL 1h)" }
+```
+
+#### Field `result` (saat `finished`)
+
+| Field | Tipe | Keterangan |
+|---|---|---|
+| `nomor_naskah` | string\|null | Nomor naskah dinas hasil ekstraksi |
+| `tanggal` | string\|null | Tanggal naskah (apa adanya dari dokumen) |
+| `hal` | string\|null | Perihal/subjek |
+| `suggest_ringkasan` | string\|null | Ringkasan singkat yang di-generate LLM |
+| `parsed_markdown_preview` | string | Cuplikan markdown hasil Docling (untuk debug) |
+| `metadata_json_valid` | bool | `true` bila LLM mengembalikan JSON metadata valid |
+| `ringkasan_json_valid` | bool | `true` bila LLM mengembalikan JSON ringkasan valid |
+| `warnings` | string[] | Peringatan non-fatal (mis. `docling_parse_failed: ...`) — **cek ini** |
+| `*_elapsed_s` | number | Timing per tahap (docling / metadata / ringkasan) |
+| `model` / `strategy` | string | Model & strategi (`single-shot` / `map-reduce`) |
+| `parsed_chars` | number | Jumlah karakter hasil parse |
+| `original_filename` | string | Nama file asli yang diunggah |
+
 ### Contoh curl
 
 ```bash

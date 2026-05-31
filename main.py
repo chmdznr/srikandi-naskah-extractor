@@ -56,13 +56,63 @@ app.add_middleware(
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# --- OpenAPI response examples (shown in /docs; do NOT affect runtime output) ---
+_EX_QUEUED = {
+    "id": "4b1e9dc1-97ec-4b15-b56d-9c6eeab59a76",
+    "status": "queued",
+    "created_at": "2026-05-31T02:33:15.646122+00:00",
+    "started_at": None, "ended_at": None, "result": None, "error": None,
+}
+_EX_FINISHED = {
+    "id": "4b1e9dc1-97ec-4b15-b56d-9c6eeab59a76",
+    "status": "finished",
+    "created_at": "2026-05-31T02:33:15.646122+00:00",
+    "started_at": "2026-05-31T02:33:15.653019+00:00",
+    "ended_at": "2026-05-31T02:33:22.209115+00:00",
+    "result": {
+        "hal": None,
+        "nomor_naskah": "000.5.6.2/X /2025",
+        "tanggal": "15 Desember 2025",
+        "suggest_ringkasan": "Surat tugas ini menugaskan Plt. Kepala Dinas untuk verifikasi arsip usul musnah.",
+        "parsed_markdown_preview": "## SURAT TUGAS\n\nNOMOR : 000.5.6.2/X /2025 ...",
+        "docling_elapsed_s": 10.512, "metadata_elapsed_s": 4.294, "ringkasan_elapsed_s": 1.622,
+        "ringkasan_n_llm_calls": 1, "metadata_json_valid": True, "ringkasan_json_valid": True,
+        "model": "qwen2.5:7b-instruct-q4_K_M", "strategy": "single-shot", "parsed_chars": 2754,
+        "warnings": [], "original_filename": "SURAT TUGAS PEMUSNAHAN.pdf",
+    },
+    "error": None,
+}
+_EX_FAILED = {
+    "id": "9c139434-a74c-4eeb-a734-0fe7f9162409",
+    "status": "failed",
+    "created_at": "2026-05-31T02:33:24.247982+00:00",
+    "started_at": "2026-05-31T02:33:24.253716+00:00",
+    "ended_at": "2026-05-31T02:33:25.000000+00:00",
+    "result": None,
+    "error": "ConnectionError: [Errno 111] Connection refused",
+}
+_EX_HEALTH_OK = {"status": "ok", "redis": True, "workers_listening": 1, "queue_depth": 0, "queue": "extractor"}
+_EX_HEALTH_DEGRADED = {"status": "degraded", "redis": True, "workers_listening": 0, "queue_depth": 0, "queue": "extractor"}
+_EX_401 = {"detail": "Invalid or missing API key"}
+_EX_400 = {"detail": "Unsupported file type '.txt'. Hanya .pdf / .docx didukung."}
+_EX_404 = {"detail": "Job <id> not found (mungkin sudah expired — default TTL 1h)"}
+
 
 @app.get("/", include_in_schema=False)
 def root():
     return FileResponse(STATIC_DIR / "index.html")
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    summary="Health check (open, no auth)",
+    responses={
+        200: {"content": {"application/json": {"examples": {
+            "ok": {"summary": "Healthy", "value": _EX_HEALTH_OK},
+            "degraded": {"summary": "Redis down / no worker (returns 503)", "value": _EX_HEALTH_DEGRADED},
+        }}}},
+    },
+)
 def health():
     try:
         ping_ok = jobs.get_redis().ping()
@@ -101,7 +151,17 @@ def _job_to_dict(job) -> dict:
     return out
 
 
-@app.post("/jobs", status_code=202, dependencies=[Depends(require_api_key)])
+@app.post(
+    "/jobs",
+    status_code=202,
+    dependencies=[Depends(require_api_key)],
+    summary="Enqueue an extraction job (upload .pdf / .docx)",
+    responses={
+        202: {"description": "Job enqueued", "content": {"application/json": {"example": _EX_QUEUED}}},
+        400: {"description": "Unsupported file type / empty upload", "content": {"application/json": {"example": _EX_400}}},
+        401: {"description": "Missing/invalid API key", "content": {"application/json": {"example": _EX_401}}},
+    },
+)
 async def enqueue_job(file: UploadFile = File(...)):
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in (".pdf", ".docx"):
@@ -116,7 +176,20 @@ async def enqueue_job(file: UploadFile = File(...)):
     return _job_to_dict(job)
 
 
-@app.get("/jobs/{job_id}", dependencies=[Depends(require_api_key)])
+@app.get(
+    "/jobs/{job_id}",
+    dependencies=[Depends(require_api_key)],
+    summary="Poll job status + result",
+    responses={
+        200: {"content": {"application/json": {"examples": {
+            "finished": {"summary": "finished (hasil lengkap)", "value": _EX_FINISHED},
+            "queued": {"summary": "queued / started (result masih null)", "value": _EX_QUEUED},
+            "failed": {"summary": "failed (exception tak tertangani)", "value": _EX_FAILED},
+        }}}},
+        401: {"description": "Missing/invalid API key", "content": {"application/json": {"example": _EX_401}}},
+        404: {"description": "Unknown / expired job", "content": {"application/json": {"example": _EX_404}}},
+    },
+)
 def get_job(job_id: str):
     job = jobs.fetch_job(job_id)
     if job is None:
