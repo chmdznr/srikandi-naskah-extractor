@@ -211,7 +211,7 @@ queued → started → finished
 | `nomor_naskah` | string\|null | Nomor naskah dinas hasil ekstraksi |
 | `tanggal` | string\|null | Tanggal naskah, **selalu `YYYY-MM-DD`** (dinormalisasi; bila gagal → `null` + warning `tanggal_not_normalized: <raw>` berisi nilai mentahnya) |
 | `hal` | string\|null | Perihal/subjek (dari label "Hal"/"Perihal" di kop; `null` bila jenis naskah tak memiliki label itu, mis. Surat Tugas/SK — tak pernah string kosong; nilai karangan LLM tanpa label di-drop dengan warning `hal_dropped_no_label`) |
-| `suggest_ringkasan` | string\|null | Ringkasan singkat yang di-generate LLM |
+| `suggest_ringkasan` | string\|null | Ringkasan singkat yang di-generate LLM (string bermakna atau `null` — tak pernah `""`) |
 | `parsed_markdown_preview` | string | Cuplikan markdown hasil Docling (untuk debug) |
 | `metadata_json_valid` | bool | `true` bila LLM mengembalikan JSON metadata valid |
 | `ringkasan_json_valid` | bool | `true` bila LLM mengembalikan JSON ringkasan valid |
@@ -288,14 +288,19 @@ Implementasi: `callback.py` (`post_result`, fire-and-forget) dipanggil dari
 ```
 extractor-app/
 ├── pyproject.toml         # uv-managed: fastapi, uvicorn, docling, ollama, redis, rq
-├── prompts.py             # PROMPT_METADATA + PROMPT_RINGKASAN — sync dengan Colab benchmark
-├── extractor.py           # core pipeline: Docling parse → Ollama generate → ExtractionResult
+│                          #   + pin torch cu128 utk Linux GPU (lihat deploy/README.md)
+├── prompts.py             # PROMPT_METADATA + PROMPT_RINGKASAN — basis Colab benchmark,
+│                          #   deviasi 2026-06-04: aturan tanggal YYYY-MM-DD + hal=label Hal/Perihal
+├── extractor.py           # core pipeline: Docling parse → Ollama generate → normalisasi field
+│                          #   (_normalize_tanggal, _clean_text_field, guard _hal_label_present)
 ├── jobs.py                # Redis + RQ wiring (enqueue, fetch_job, run_extraction + callback)
 ├── worker.py              # RQ worker entrypoint (SimpleWorker — in-process untuk CUDA)
 ├── main.py                # FastAPI app: POST /jobs, GET /jobs/{id}, GET /health + auth gate
 ├── callback.py            # fire-and-forget postback hasil ke FE (post_result)
 ├── test_auth.py           # tes auth gate (X-API-Key)
 ├── test_callback.py       # tes callback fire-and-forget (mock httpx)
+├── test_normalize_tanggal.py   # tes normalisasi tanggal → ISO (28 kasus)
+├── test_clean_text_field.py    # tes pembersihan field teks + guard label hal
 ├── static/index.html      # demo UI (drag-drop + polling + tombol 🔑 API key)
 ├── Dockerfile             # CPU image (python:3.12-slim + uv); default untuk Mac dev
 ├── Dockerfile.gpu         # GPU image (pytorch+cuda+cudnn); untuk Linux GPU host

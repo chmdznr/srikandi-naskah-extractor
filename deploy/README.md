@@ -79,3 +79,26 @@ tail -f /var/log/extractor/worker.log
   publish 11434.
 - **Container, not VM:** GPU is already passed through (no `nvidia-container-toolkit`
   needed); `docker-compose.gpu.yml` is for the VM path (Vultr/Cudo/Biznet) instead.
+- **torch is pinned to cu128 — don't "upgrade" it blindly.** PyPI's default torch
+  (2.12+ = cu130 build) needs NVIDIA driver ≥ 580; RunPod hosts ran 570.x
+  (max CUDA 12.8) as of 2026-06. With a too-new build, `torch.cuda.is_available()`
+  silently returns `False` and **Docling falls back to CPU** (~10s vs ~1-2s per PDF
+  parse) — no error anywhere. Check `nvidia-smi` driver version before bumping the
+  pin in `pyproject.toml` (`[tool.uv.sources]` → `pytorch-cu128` index, Linux only;
+  macOS dev keeps PyPI/MPS). Verify after deploy:
+  `grep "Docling accelerator" /var/log/extractor/worker.log` → must say `CUDA`.
+- **`uv run` auto-syncs the venv to `uv.lock` on every service (re)start** —
+  supervisord launches api/worker via `uv run`, so any manual `uv pip install` on
+  the pod is **silently reverted** at the next `supervisorctl restart`. Land
+  dependency changes in `pyproject.toml` + `uv.lock` (commit, then `redeploy.sh`
+  or scp both files) — never hot-patch the venv.
+- **Container overlay disk (`/`) is small (~20GB) and uv's cache eats it.**
+  `/root/.cache/uv` grew to 11GB after a few syncs and broke installs with
+  `No space left on device`. Safe fix: `rm -rf /root/.cache/uv` — the venv lives
+  on `/workspace` (different filesystem), so the cache is never hardlink-reused
+  anyway (uv falls back to full copy; the "Failed to hardlink" warning is expected).
+- **No rsync in RunPod pytorch images.** Transfer code with scp per-file or
+  tar-over-ssh from the repo root:
+  `COPYFILE_DISABLE=1 tar czf - --exclude=.venv --exclude=__pycache__ --exclude='._*' . | ssh -p <port> root@<ip> 'tar xzf - --no-same-owner -C /workspace/extractor-app'`
+  (`COPYFILE_DISABLE=1` + `--no-same-owner` required from macOS, else AppleDouble
+  `._*` files + uid-501 chown errors break the extract).
