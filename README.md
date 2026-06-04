@@ -138,7 +138,7 @@ queued → started → finished
   "result": {
     "hal": null,
     "nomor_naskah": "000.5.6.2/X /2025",
-    "tanggal": "15 Desember 2025",
+    "tanggal": "2025-12-15",
     "suggest_ringkasan": "Surat tugas ini menugaskan Plt. Kepala Dinas Arsip dan Perpustakaan untuk melaksanakan penilaian dan verifikasi fisik arsip usul musnah.",
     "parsed_markdown_preview": "## SURAT TUGAS\n\nNOMOR : 000.5.6.2/X /2025\n\nDasar : Keputusan Bupati ...",
     "docling_elapsed_s": 10.512,
@@ -209,7 +209,7 @@ queued → started → finished
 | Field | Tipe | Keterangan |
 |---|---|---|
 | `nomor_naskah` | string\|null | Nomor naskah dinas hasil ekstraksi |
-| `tanggal` | string\|null | Tanggal naskah (apa adanya dari dokumen) |
+| `tanggal` | string\|null | Tanggal naskah, **selalu `YYYY-MM-DD`** (dinormalisasi; bila gagal → `null` + warning `tanggal_not_normalized: <raw>` berisi nilai mentahnya) |
 | `hal` | string\|null | Perihal/subjek |
 | `suggest_ringkasan` | string\|null | Ringkasan singkat yang di-generate LLM |
 | `parsed_markdown_preview` | string | Cuplikan markdown hasil Docling (untuk debug) |

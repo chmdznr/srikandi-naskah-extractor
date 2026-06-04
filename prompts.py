@@ -1,4 +1,9 @@
-"""Extraction prompts — identical to the Colab benchmark (decomposed metadata + ringkasan)."""
+"""Extraction prompts — based on the Colab benchmark (decomposed metadata + ringkasan).
+
+Deviasi dari prompt benchmark: PROMPT_METADATA punya aturan tambahan format tanggal
+YYYY-MM-DD (2026-06-04). Angka akurasi benchmark (85.2%) diukur dengan prompt lama;
+field selain tanggal tidak berubah.
+"""
 
 PROMPT_METADATA = """Kamu adalah ekstractor data dokumen.
 Ekstrak field berikut dari HEADER dokumen di bawah ini dan kembalikan HANYA dalam format JSON, tanpa penjelasan apapun.
@@ -11,6 +16,8 @@ Format JSON yang diinginkan:
 }}
 
 Jika data tidak ditemukan atau berupa ${{param}} isi dengan null.
+Aturan field "tanggal": tulis dalam format YYYY-MM-DD (contoh: 2026-05-12).
+Konversi nama bulan Indonesia ke angka. Jika tanggal tidak lengkap atau tidak ditemukan, isi null.
 
 HEADER DOKUMEN:
 {header_text}

@@ -72,7 +72,7 @@ _EX_FINISHED = {
     "result": {
         "hal": None,
         "nomor_naskah": "000.5.6.2/X /2025",
-        "tanggal": "15 Desember 2025",
+        "tanggal": "2025-12-15",
         "suggest_ringkasan": "Surat tugas ini menugaskan Plt. Kepala Dinas untuk verifikasi arsip usul musnah.",
         "parsed_markdown_preview": "## SURAT TUGAS\n\nNOMOR : 000.5.6.2/X /2025 ...",
         "docling_elapsed_s": 10.512, "metadata_elapsed_s": 4.294, "ringkasan_elapsed_s": 1.622,

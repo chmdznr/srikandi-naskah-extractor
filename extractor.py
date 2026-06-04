@@ -11,6 +11,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field, asdict
+from datetime import date
 from pathlib import Path
 
 import ollama
@@ -126,6 +127,59 @@ def _extract_json(text: str) -> tuple[dict, bool]:
     return {"_raw": text[:500]}, False
 
 
+# --- Normalisasi tanggal -> ISO YYYY-MM-DD ------------------------------------
+# Kontrak: field `tanggal` di ExtractionResult SELALU "YYYY-MM-DD" valid atau None.
+# Prompt sudah minta ISO, tapi LLM tak bisa dijamin patuh — normalizer ini penjaminnya.
+_MONTHS_ID = {
+    "jan": 1, "januari": 1,
+    "feb": 2, "februari": 2, "pebruari": 2,
+    "mar": 3, "maret": 3,
+    "apr": 4, "april": 4,
+    "mei": 5,
+    "jun": 6, "juni": 6,
+    "jul": 7, "juli": 7,
+    "agu": 8, "agt": 8, "ags": 8, "agustus": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "okt": 10, "oktober": 10,
+    "nov": 11, "november": 11, "nopember": 11,
+    "des": 12, "desember": 12,
+}
+# search (bukan fullmatch) — toleran prefix kota/hari: "Jakarta, 12 Mei 2026"
+_RE_TANGGAL_ISO = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+_RE_TANGGAL_ID = re.compile(r"\b(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})\b")
+_RE_TANGGAL_NUM = re.compile(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})\b")
+
+
+def _valid_iso(year: int, month: int, day: int) -> str | None:
+    try:
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return None
+
+
+def _normalize_tanggal(value: str | None) -> str | None:
+    """Normalisasi nilai tanggal bebas-format ke 'YYYY-MM-DD', atau None bila gagal.
+
+    Urutan: ISO → 'D NamaBulanIndonesia YYYY' → 'DD/MM/YYYY' (konvensi Indonesia,
+    juga separator '-' dan '.'). Tanggal kalender invalid (mis. 2026-02-30) → None.
+    """
+    if value is None or not str(value).strip():
+        return None
+    text = str(value).strip()
+
+    if m := _RE_TANGGAL_ISO.search(text):
+        return _valid_iso(int(m[1]), int(m[2]), int(m[3]))
+
+    if m := _RE_TANGGAL_ID.search(text):
+        if month := _MONTHS_ID.get(m[2].lower()):
+            return _valid_iso(int(m[3]), month, int(m[1]))
+
+    if m := _RE_TANGGAL_NUM.search(text):
+        return _valid_iso(int(m[3]), int(m[2]), int(m[1]))
+
+    return None
+
+
 def _ollama_call(model: str, prompt: str, model_ctx: int, num_predict: int = RESPONSE_TOKENS) -> tuple[str, dict]:
     """Run a single Ollama generate call with right-sized num_ctx. Returns (response_text, timing_dict)."""
     ctx_needed = needed_tokens(len(prompt), num_predict)
@@ -201,7 +255,10 @@ def extract(
         if meta_ok:
             result.hal = meta_obj.get("hal")
             result.nomor_naskah = meta_obj.get("nomor_naskah")
-            result.tanggal = meta_obj.get("tanggal")
+            raw_tanggal = meta_obj.get("tanggal")
+            result.tanggal = _normalize_tanggal(raw_tanggal)
+            if raw_tanggal and result.tanggal is None:
+                result.warnings.append(f"tanggal_not_normalized: {raw_tanggal!r}")
         else:
             result.warnings.append("metadata_json_parse_failed")
     except Exception as e:
