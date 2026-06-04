@@ -11,7 +11,22 @@ dependencies = [
     "ollama>=0.4",
     "redis>=5.0",
     "rq>=2.0",
+    # Pin torch ke build cu128: PyPI default (cu130) butuh driver >=580,
+    # host RunPod baru 570.x (max CUDA 12.8) -> torch.cuda.is_available()=False
+    # -> Docling jatuh ke CPU (parse PDF ~10s vs ~2-4s di GPU).
+    "torch==2.11.*",
+    "torchvision==0.26.*",
 ]
+
+[tool.uv.sources]
+# cu128 hanya untuk Linux (pod GPU); macOS tetap resolve dari PyPI (build MPS).
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
 [dependency-groups]
 dev = [
