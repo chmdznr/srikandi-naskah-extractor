@@ -63,22 +63,26 @@ _EX_QUEUED = {
     "created_at": "2026-05-31T02:33:15.646122+00:00",
     "started_at": None, "ended_at": None, "result": None, "error": None,
 }
+# Respons nyata pod GPU 2026-06-04 (Surat Tugas: hal di-null-kan guard + warning-nya).
 _EX_FINISHED = {
-    "id": "4b1e9dc1-97ec-4b15-b56d-9c6eeab59a76",
+    "id": "d08ed1ca-aaa5-4609-bbf2-e9199002296a",
     "status": "finished",
-    "created_at": "2026-05-31T02:33:15.646122+00:00",
-    "started_at": "2026-05-31T02:33:15.653019+00:00",
-    "ended_at": "2026-05-31T02:33:22.209115+00:00",
+    "created_at": "2026-06-04T01:31:36.156264+00:00",
+    "started_at": "2026-06-04T01:31:36.163231+00:00",
+    "ended_at": "2026-06-04T01:31:44.746722+00:00",
     "result": {
         "hal": None,
         "nomor_naskah": "000.5.6.2/X /2025",
         "tanggal": "2025-12-15",
-        "suggest_ringkasan": "Surat tugas ini menugaskan Plt. Kepala Dinas untuk verifikasi arsip usul musnah.",
+        "suggest_ringkasan": "Surat tugas ini menugaskan Plt. Kepala Dinas Arsip dan Perpustakaan Kabupaten Pekalongan untuk melaksanakan penilaian dan verifikasi fisik arsip usul musnah milik eks Bagian Keuangan yang memiliki retensi minimal 10 tahun.",
         "parsed_markdown_preview": "## SURAT TUGAS\n\nNOMOR : 000.5.6.2/X /2025 ...",
-        "docling_elapsed_s": 10.512, "metadata_elapsed_s": 4.294, "ringkasan_elapsed_s": 1.622,
+        "docling_elapsed_s": 1.088, "metadata_elapsed_s": 4.326, "ringkasan_elapsed_s": 1.483,
         "ringkasan_n_llm_calls": 1, "metadata_json_valid": True, "ringkasan_json_valid": True,
         "model": "qwen2.5:7b-instruct-q4_K_M", "strategy": "single-shot", "parsed_chars": 2754,
-        "warnings": [], "original_filename": "SURAT TUGAS PEMUSNAHAN.pdf",
+        "warnings": [
+            "hal_dropped_no_label: 'Melaksanakan penilaian dan verifikasi fisik arsip usul musnah milik eks Bagian Keuangan yang memiliki retensi sekurang-kurangnya 10 (sepuluh) tahun.'"
+        ],
+        "original_filename": "SURAT TUGAS PEMUSNAHAN.pdf",
     },
     "error": None,
 }
