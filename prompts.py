@@ -18,7 +18,7 @@ Format JSON yang diinginkan:
 Jika data tidak ditemukan atau berupa ${{param}} isi dengan null.
 Aturan field "tanggal": tulis dalam format YYYY-MM-DD (contoh: 2026-05-12).
 Konversi nama bulan Indonesia ke angka. Jika tanggal tidak lengkap atau tidak ditemukan, isi null.
-Aturan field "hal": isi dari label "Hal" atau "Perihal" di kop surat. Jika jenis naskah tidak memiliki label tersebut (misalnya Surat Tugas, Surat Keputusan, Surat Perintah), isi null — jangan isi string kosong.
+Aturan field "hal": HANYA salin teks setelah label "Hal :" atau "Perihal :" di kop surat. JANGAN membuat ringkasan atau mengambil dari bagian lain (Untuk, Dasar, MEMERINTAHKAN, isi surat). Jika tidak ada baris berlabel "Hal"/"Perihal", isi null.
 
 HEADER DOKUMEN:
 {header_text}

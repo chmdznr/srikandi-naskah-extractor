@@ -28,3 +28,31 @@ from extractor import _clean_text_field
 )
 def test_clean_text_field(raw, expected):
     assert _clean_text_field(raw) == expected
+
+
+# --- _hal_label_present ----------------------------------------------------
+from extractor import _hal_label_present
+
+
+@pytest.mark.parametrize(
+    "header,expected",
+    [
+        # Label di kop surat → True
+        ("Nomor : 1\nHal : Undangan Narasumber", True),
+        ("Perihal\t: Permohonan Pemasangan", True),
+        ("HAL: SESUATU", True),
+        # Bentuk markdown table hasil Docling → True
+        ("| Hal | : Undangan |", True),
+        ("| Perihal | : | Permohonan |", True),
+        # Tanpa label (Surat Tugas / SK) → False
+        ("SURAT TUGAS\nNOMOR : 000.5/2025\nDasar : ...\nUntuk : Melaksanakan ...", False),
+        # Kata "hal" di tengah kalimat ≠ label → False
+        ("dalam hal : sesuatu yang lain", False),
+        ("segala hal: penting", False),
+        # "Hal." singkatan halaman → False
+        ("Hal. 2 dari 3", False),
+        ("", False),
+    ],
+)
+def test_hal_label_present(header, expected):
+    assert _hal_label_present(header) is expected

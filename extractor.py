@@ -144,6 +144,18 @@ def _clean_text_field(value: str | None) -> str | None:
     return text
 
 
+# Guard deterministik field "hal": LLM 7B kadang MENGARANG hal dari bagian lain
+# (Untuk/Dasar di Surat Tugas) meski prompt melarang. Kontraknya verifiable:
+# nilai hal hanya sah bila header punya baris berlabel "Hal :"/"Perihal :".
+# Anchor awal-baris (+ maks 10 char non-kata utk prefix "| " markdown table)
+# menolak "dalam hal :" di tengah kalimat dan "Hal. 2" (halaman).
+_RE_HAL_LABEL = re.compile(r"(?im)^\W{0,10}(?:perihal|hal)\b\s*\|?\s*:")
+
+
+def _hal_label_present(header: str) -> bool:
+    return bool(_RE_HAL_LABEL.search(header))
+
+
 # --- Normalisasi tanggal -> ISO YYYY-MM-DD ------------------------------------
 # Kontrak: field `tanggal` di ExtractionResult SELALU "YYYY-MM-DD" valid atau None.
 # Prompt sudah minta ISO, tapi LLM tak bisa dijamin patuh — normalizer ini penjaminnya.
@@ -271,6 +283,9 @@ def extract(
         result.metadata_json_valid = meta_ok
         if meta_ok:
             result.hal = _clean_text_field(meta_obj.get("hal"))
+            if result.hal and not _hal_label_present(header):
+                result.warnings.append(f"hal_dropped_no_label: {result.hal!r}")
+                result.hal = None
             result.nomor_naskah = _clean_text_field(meta_obj.get("nomor_naskah"))
             raw_tanggal = meta_obj.get("tanggal")
             result.tanggal = _normalize_tanggal(raw_tanggal)
