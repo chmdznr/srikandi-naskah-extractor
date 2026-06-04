@@ -210,7 +210,7 @@ queued → started → finished
 |---|---|---|
 | `nomor_naskah` | string\|null | Nomor naskah dinas hasil ekstraksi |
 | `tanggal` | string\|null | Tanggal naskah, **selalu `YYYY-MM-DD`** (dinormalisasi; bila gagal → `null` + warning `tanggal_not_normalized: <raw>` berisi nilai mentahnya) |
-| `hal` | string\|null | Perihal/subjek |
+| `hal` | string\|null | Perihal/subjek (dari label "Hal"/"Perihal" di kop; `null` bila jenis naskah tak memiliki label itu, mis. Surat Tugas/SK — tak pernah string kosong) |
 | `suggest_ringkasan` | string\|null | Ringkasan singkat yang di-generate LLM |
 | `parsed_markdown_preview` | string | Cuplikan markdown hasil Docling (untuk debug) |
 | `metadata_json_valid` | bool | `true` bila LLM mengembalikan JSON metadata valid |

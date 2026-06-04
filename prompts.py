@@ -1,8 +1,8 @@
 """Extraction prompts — based on the Colab benchmark (decomposed metadata + ringkasan).
 
-Deviasi dari prompt benchmark: PROMPT_METADATA punya aturan tambahan format tanggal
-YYYY-MM-DD (2026-06-04). Angka akurasi benchmark (85.2%) diukur dengan prompt lama;
-field selain tanggal tidak berubah.
+Deviasi dari prompt benchmark (2026-06-04): PROMPT_METADATA punya aturan tambahan
+(1) format tanggal YYYY-MM-DD, (2) field "hal" = label Hal/Perihal, null bila jenis
+naskah tak punya label itu. Angka akurasi benchmark (85.2%) diukur dengan prompt lama.
 """
 
 PROMPT_METADATA = """Kamu adalah ekstractor data dokumen.
@@ -18,6 +18,7 @@ Format JSON yang diinginkan:
 Jika data tidak ditemukan atau berupa ${{param}} isi dengan null.
 Aturan field "tanggal": tulis dalam format YYYY-MM-DD (contoh: 2026-05-12).
 Konversi nama bulan Indonesia ke angka. Jika tanggal tidak lengkap atau tidak ditemukan, isi null.
+Aturan field "hal": isi dari label "Hal" atau "Perihal" di kop surat. Jika jenis naskah tidak memiliki label tersebut (misalnya Surat Tugas, Surat Keputusan, Surat Perintah), isi null — jangan isi string kosong.
 
 HEADER DOKUMEN:
 {header_text}

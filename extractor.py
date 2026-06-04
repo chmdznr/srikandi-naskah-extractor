@@ -127,6 +127,23 @@ def _extract_json(text: str) -> tuple[dict, bool]:
     return {"_raw": text[:500]}, False
 
 
+# --- Normalisasi field teks ----------------------------------------------------
+# Kontrak: field teks (hal, nomor_naskah, suggest_ringkasan) = string bermakna atau
+# None — tak pernah "" / "-" / literal merge-var "${hal}" dari template kosong.
+_RE_MERGE_VAR = re.compile(r"^\$\{[^}]*\}$")
+
+
+def _clean_text_field(value: str | None) -> str | None:
+    """Strip; ubah string kosong, '-'/'—' (konvensi kosong surat dinas), dan literal
+    merge-var murni ('${hal}') menjadi None. Merge-var di tengah teks dibiarkan."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text in ("-", "—") or _RE_MERGE_VAR.match(text):
+        return None
+    return text
+
+
 # --- Normalisasi tanggal -> ISO YYYY-MM-DD ------------------------------------
 # Kontrak: field `tanggal` di ExtractionResult SELALU "YYYY-MM-DD" valid atau None.
 # Prompt sudah minta ISO, tapi LLM tak bisa dijamin patuh — normalizer ini penjaminnya.
@@ -253,8 +270,8 @@ def extract(
         meta_obj, meta_ok = _extract_json(meta_response)
         result.metadata_json_valid = meta_ok
         if meta_ok:
-            result.hal = meta_obj.get("hal")
-            result.nomor_naskah = meta_obj.get("nomor_naskah")
+            result.hal = _clean_text_field(meta_obj.get("hal"))
+            result.nomor_naskah = _clean_text_field(meta_obj.get("nomor_naskah"))
             raw_tanggal = meta_obj.get("tanggal")
             result.tanggal = _normalize_tanggal(raw_tanggal)
             if raw_tanggal and result.tanggal is None:
@@ -283,7 +300,7 @@ def _ringkasan_single_shot(result: ExtractionResult, markdown: str, model: str, 
         obj, ok = _extract_json(response)
         result.ringkasan_json_valid = ok
         if ok:
-            result.suggest_ringkasan = obj.get("suggest_ringkasan")
+            result.suggest_ringkasan = _clean_text_field(obj.get("suggest_ringkasan"))
         else:
             result.warnings.append("ringkasan_json_parse_failed")
     except Exception as e:
@@ -322,7 +339,7 @@ def _ringkasan_map_reduce(result: ExtractionResult, markdown: str, model: str, m
         obj, ok = _extract_json(response)
         result.ringkasan_json_valid = ok
         if ok:
-            result.suggest_ringkasan = obj.get("suggest_ringkasan")
+            result.suggest_ringkasan = _clean_text_field(obj.get("suggest_ringkasan"))
         else:
             result.warnings.append("ringkasan_reduce_json_parse_failed")
     except Exception as e:
